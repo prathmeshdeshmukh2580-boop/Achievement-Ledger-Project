@@ -13,6 +13,8 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
   RefreshCw,
 } from "lucide-react";
 
@@ -41,6 +43,21 @@ export default function ExtractPage() {
   const [verificationUrl, setVerificationUrl] = useState("");
   const [summary, setSummary] = useState("");
   const [savedFileUrl, setSavedFileUrl] = useState<string | null>(null);
+  const [isTeamProject, setIsTeamProject] = useState(false);
+
+  // Anomaly Detection: Compare extracted recipient name against user's registered name
+  const isNameMismatch = React.useMemo(() => {
+    if (!recipientName?.trim() || !user?.fullName?.trim()) return false;
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+    const cTokens = clean(recipientName).split(/\s+/).filter((t) => t.length > 1);
+    const uTokens = clean(user.fullName).split(/\s+/).filter((t) => t.length > 1);
+    if (cTokens.length === 0 || uTokens.length === 0) return false;
+    const matches = cTokens.filter((ct) =>
+      uTokens.some((ut) => ut === ct || (ut.length > 3 && ct.length > 3 && (ut.includes(ct) || ct.includes(ut))))
+    );
+    // If no tokens match (e.g. "Anushka Balkunde" vs "Prathmesh Deshmukh"), it is an anomaly!
+    return matches.length === 0;
+  }, [recipientName, user?.fullName]);
 
   const categories: AchievementCategory[] = [
     "Hackathon",
@@ -164,9 +181,20 @@ export default function ExtractPage() {
       return;
     }
 
+    // Security & Integrity check: Detect certificate recipient name mismatch
+    if (isNameMismatch && !isTeamProject) {
+      setExtractError(
+        `Anomaly Detected: Certificate recipient is "${recipientName || "Unknown"}", which does not match your registered name "${user.fullName}". If this was a group hackathon or team event, please check the "Team Project" verification option below.`
+      );
+      return;
+    }
+
     setSaving(true);
     try {
-      const finalSummary = summary || recomputeSummary(achievementType, position, eventName, issuer, title);
+      const baseSummary = summary || recomputeSummary(achievementType, position, eventName, issuer, title);
+      const finalSummary = isTeamProject && recipientName && !baseSummary.includes(recipientName)
+        ? `${baseSummary} [Team Member Certificate: ${recipientName}]`
+        : baseSummary;
 
       const res = await addAchievement({
         achievement_title: title.trim() || eventName.trim(),
@@ -354,6 +382,40 @@ export default function ExtractPage() {
                 </span>
               </div>
 
+              {/* Security Anomaly Banner: Identity Mismatch Detection */}
+              {isNameMismatch && (
+                <div className="p-4 bg-amber-50/90 border-2 border-amber-300 rounded-xl space-y-3">
+                  <div className="flex items-start space-x-2.5">
+                    <ShieldAlert className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center space-x-1.5">
+                        <span>Identity Verification Anomaly Detected</span>
+                      </p>
+                      <p className="text-xs text-amber-800 leading-relaxed">
+                        The name on this certificate (<span className="font-semibold text-amber-950 underline">{recipientName || "Extracted Name"}</span>) does not match your registered profile name (<span className="font-semibold text-amber-950 underline">{user?.fullName || "Student"}</span>).
+                      </p>
+                      <p className="text-[11px] text-amber-700">
+                        To maintain academic integrity and prevent claiming other students&apos; certificates, individual personal certificates must match your profile.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-amber-200/80">
+                    <label className="flex items-start space-x-2.5 cursor-pointer text-xs font-medium text-amber-950 bg-white/70 p-2.5 rounded-lg border border-amber-200 hover:bg-white transition">
+                      <input
+                        type="checkbox"
+                        checked={isTeamProject}
+                        onChange={(e) => setIsTeamProject(e.target.checked)}
+                        className="mt-0.5 rounded border-amber-300 text-navy-800 focus:ring-navy-500"
+                      />
+                      <span>
+                        <strong>Team / Hackathon Exception:</strong> This is a group or team project certificate where my teammate&apos;s name is printed on the physical certificate.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {/* Achievement Title */}
               <div>
                 <div className="flex justify-between items-center mb-1">
@@ -505,9 +567,22 @@ export default function ExtractPage() {
               {/* Recipient Name & Credential ID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-navy-800 mb-1">
-                    Recipient Name
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-navy-800">
+                      Recipient Name
+                    </label>
+                    {isNameMismatch ? (
+                      <span className="text-[10px] text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full font-medium flex items-center space-x-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-700" />
+                        <span>Mismatch with your name</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-medium flex items-center space-x-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>Matches profile</span>
+                      </span>
+                    )}
+                  </div>
                   <input
                     id="extracted-recipient-input"
                     type="text"
@@ -577,11 +652,21 @@ export default function ExtractPage() {
                 <button
                   id="confirm-and-save-button"
                   type="submit"
-                  disabled={saving}
-                  className="flex items-center space-x-2 px-6 py-2.5 bg-navy-800 hover:bg-navy-700 text-cream-50 text-xs font-semibold rounded-md shadow-sm transition disabled:opacity-60"
+                  disabled={saving || (isNameMismatch && !isTeamProject)}
+                  className={`flex items-center space-x-2 px-6 py-2.5 rounded-md shadow-sm transition text-xs font-semibold ${
+                    isNameMismatch && !isTeamProject
+                      ? "bg-gray-300 text-gray-700 cursor-not-allowed"
+                      : "bg-navy-800 hover:bg-navy-700 text-cream-50"
+                  }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{saving ? "Saving to Ledger..." : "Confirm & Save to Ledger"}</span>
+                  <span>
+                    {saving
+                      ? "Saving to Ledger..."
+                      : isNameMismatch && !isTeamProject
+                      ? "Name Mismatch — Acknowledge Team Project Above"
+                      : "Confirm & Save to Ledger"}
+                  </span>
                 </button>
               </div>
             </form>

@@ -45,15 +45,23 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
     const base64Data = buffer.toString("base64");
 
-    // Save file locally for record attachment
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    // Safe file handling: only write to disk if supported (e.g. local dev).
+    // On serverless environments (like Vercel / AWS Lambda), the filesystem is read-only.
+    let fileUrl: string | null = null;
+    try {
+      const uploadsDir = path.join(process.cwd(), "public", "uploads");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path.join(uploadsDir, safeName);
+      fs.writeFileSync(filePath, buffer);
+      fileUrl = `/uploads/${safeName}`;
+    } catch {
+      // In serverless / read-only environments, skip writing to disk.
+      // Extraction continues uninterrupted.
+      fileUrl = null;
     }
-    const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const filePath = path.join(uploadsDir, safeName);
-    fs.writeFileSync(filePath, buffer);
-    const fileUrl = `/uploads/${safeName}`;
 
     // Initialize Gemini SDK
     const ai = new GoogleGenAI({ apiKey });
