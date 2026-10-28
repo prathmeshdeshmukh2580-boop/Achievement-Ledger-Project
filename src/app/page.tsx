@@ -104,11 +104,11 @@ export default function HomePage() {
       {/* Design Thinking Project Attribution */}
       <div className="p-6 bg-cream-100/70 rounded-xl border border-cream-border text-center space-y-2">
         <h3 className="font-serif text-lg font-bold text-navy-900">
-          Design Thinking Project &bull; [Group ID / Number]
+          Design Thinking Project &bull; CSBS &bull; JSPM's RSCOE
         </h3>
         <p className="text-xs text-gray-600 max-w-2xl mx-auto">
-          [Department Name] &bull; Under the guidance of [Faculty Guide Name] &bull;
-          Team: [Team Members]
+          Department of Computer Science & Business Systems &bull; Under the guidance of Prof. Suhasini Bhat &bull;
+          Team: Prathmesh Deshmukh (RBT25CB044), Atharva Gogawale (RBT25CB053), Aarya Nehete (RBT25CB016), Poras Badwaik (RBT25CB002)
         </p>
       </div>
     </div>

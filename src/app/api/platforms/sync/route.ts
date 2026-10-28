@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { PLATFORMS_CONFIG, PlatformId } from "@/lib/platformsConfig";
 
 export async function POST(req: NextRequest) {
   try {
-    const { platform, url } = await req.json();
+    const body = await req.json();
+    const { platform, url, metric1Label, metric1Value, metric2Label, metric2Value, highlight } = body;
 
     if (!platform || !url) {
       return NextResponse.json(
@@ -11,53 +13,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const trimmedUrl = String(url).trim();
+    const platformKey = String(platform).toLowerCase() as PlatformId;
+    const config = PLATFORMS_CONFIG[platformKey];
 
-    // Must be https only
-    if (!trimmedUrl.startsWith("https://")) {
+    if (!config) {
+      return NextResponse.json({ error: "Unsupported platform." }, { status: 400 });
+    }
+
+    // Strict client/server validation using platform configuration
+    const validation = config.validateAndExtract(String(url));
+    if (!validation.valid || !validation.username || !validation.canonicalUrl) {
       return NextResponse.json(
-        { error: "Only secure https:// profile links are permitted." },
+        { error: validation.error || `Invalid ${config.name} profile URL.` },
         { status: 400 }
       );
     }
 
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(trimmedUrl);
-    } catch {
-      return NextResponse.json({ error: "Invalid URL format." }, { status: 400 });
+    const { username, canonicalUrl } = validation;
+
+    // -------------------------------------------------------------------------
+    // PLATFORMS WITH CLIENT/PROJECT METRICS (Tinkercad, GrabCAD, Wokwi, etc.)
+    // Saves validated profile link + student's real project metrics & highlights.
+    // Never show guessed or scraped-from-private data.
+    // -------------------------------------------------------------------------
+    if (!config.hasPublicStats) {
+      return NextResponse.json({
+        success: true,
+        stats: {
+          username,
+          url: canonicalUrl,
+          isLinkedOnly: true,
+          metric1Label: metric1Label || config.defaultMetric1Label,
+          metric1Value: metric1Value !== undefined && metric1Value !== null ? metric1Value : "",
+          metric2Label: metric2Label || config.defaultMetric2Label,
+          metric2Value: metric2Value !== undefined && metric2Value !== null ? metric2Value : "",
+          highlight: highlight ? String(highlight).slice(0, 150) : (validation.extractedHighlight || undefined),
+          last_updated: new Date().toISOString(),
+        },
+      });
     }
 
-    const hostname = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
-    const pathname = parsedUrl.pathname.replace(/\/+$/, "");
-
-    // Platform URL domain and path validation
-    switch (platform) {
+    // -------------------------------------------------------------------------
+    // PLATFORMS WITH REAL PUBLIC APIS
+    // Calls ONLY fixed hosts built strictly from the validated username.
+    // Never calls the raw URL typed by the user.
+    // -------------------------------------------------------------------------
+    switch (platformKey) {
       case "github": {
-        if (hostname !== "github.com") {
-          return NextResponse.json(
-            { error: "This is not a valid GitHub profile link." },
-            { status: 400 }
-          );
-        }
-        const parts = pathname.split("/").filter(Boolean);
-        if (parts.length !== 1) {
-          return NextResponse.json(
-            { error: "This is not a valid GitHub profile link. Expected https://github.com/username" },
-            { status: 400 }
-          );
-        }
-        const username = parts[0];
-
-        // Fetch via Official GitHub REST API
         try {
-          const ghRes = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, {
-            headers: {
-              "User-Agent": "Achievement-Hub-App",
-              Accept: "application/vnd.github.v3+json",
-            },
-            next: { revalidate: 0 },
-          });
+          const ghRes = await fetch(
+            `https://api.github.com/users/${encodeURIComponent(username)}`,
+            {
+              headers: {
+                "User-Agent": "Achievement-Hub-App",
+                Accept: "application/vnd.github.v3+json",
+              },
+              next: { revalidate: 0 },
+            }
+          );
 
           if (ghRes.status === 404 || !ghRes.ok) {
             return NextResponse.json(
@@ -70,8 +83,8 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             success: true,
             stats: {
-              username: ghData.login,
-              url: `https://github.com/${ghData.login}`,
+              username: ghData.login || username,
+              url: canonicalUrl,
               repos: ghData.public_repos ?? 0,
               followers: ghData.followers ?? 0,
               last_updated: new Date().toISOString(),
@@ -86,23 +99,6 @@ export async function POST(req: NextRequest) {
       }
 
       case "codeforces": {
-        if (hostname !== "codeforces.com") {
-          return NextResponse.json(
-            { error: "This is not a valid Codeforces profile link." },
-            { status: 400 }
-          );
-        }
-        const parts = pathname.split("/").filter(Boolean);
-        // Supports https://codeforces.com/profile/handle
-        if (parts.length < 2 || parts[0] !== "profile") {
-          return NextResponse.json(
-            { error: "This is not a valid Codeforces profile link. Expected https://codeforces.com/profile/handle" },
-            { status: 400 }
-          );
-        }
-        const username = parts[1];
-
-        // Fetch via Official Codeforces API
         try {
           const cfRes = await fetch(
             `https://codeforces.com/api/user.info?handles=${encodeURIComponent(username)}`,
@@ -118,8 +114,6 @@ export async function POST(req: NextRequest) {
           }
 
           const userObj = cfData.result[0];
-
-          // Submissions check for problems solved
           let solvedCount = 0;
           try {
             const subRes = await fetch(
@@ -143,8 +137,8 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             success: true,
             stats: {
-              username: userObj.handle,
-              url: `https://codeforces.com/profile/${userObj.handle}`,
+              username: userObj.handle || username,
+              url: canonicalUrl,
               rating: userObj.rating ?? 0,
               maxRating: userObj.maxRating ?? 0,
               rank: userObj.rank ?? "unrated",
@@ -161,24 +155,6 @@ export async function POST(req: NextRequest) {
       }
 
       case "leetcode": {
-        if (hostname !== "leetcode.com") {
-          return NextResponse.json(
-            { error: "This is not a valid LeetCode profile link." },
-            { status: 400 }
-          );
-        }
-        const parts = pathname.split("/").filter(Boolean);
-        // Matches /u/username or /username
-        const username = parts[0] === "u" && parts.length > 1 ? parts[1] : parts[0];
-        if (!username) {
-          return NextResponse.json(
-            { error: "This is not a valid LeetCode profile link. Expected https://leetcode.com/u/username" },
-            { status: 400 }
-          );
-        }
-
-        // NOTE: LeetCode does not have an official REST API.
-        // We use the public GraphQL endpoint to fetch submission counts.
         try {
           const query = {
             query: `
@@ -201,7 +177,7 @@ export async function POST(req: NextRequest) {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Referer: `https://leetcode.com/${username}/`,
+              Referer: `https://leetcode.com/${encodeURIComponent(username)}/`,
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             },
             body: JSON.stringify(query),
@@ -234,8 +210,8 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             success: true,
             stats: {
-              username: matched.username,
-              url: `https://leetcode.com/u/${matched.username}`,
+              username: matched.username || username,
+              url: canonicalUrl,
               totalSolved: total,
               easy,
               medium,
@@ -252,23 +228,6 @@ export async function POST(req: NextRequest) {
       }
 
       case "hackerrank": {
-        if (!hostname.includes("hackerrank.com")) {
-          return NextResponse.json(
-            { error: "This is not a valid HackerRank profile link." },
-            { status: 400 }
-          );
-        }
-        const parts = pathname.split("/").filter(Boolean);
-        // Matches /profile/username or /username
-        const username = parts[0] === "profile" && parts.length > 1 ? parts[1] : parts[0];
-        if (!username) {
-          return NextResponse.json(
-            { error: "This is not a valid HackerRank profile link. Expected https://www.hackerrank.com/profile/username" },
-            { status: 400 }
-          );
-        }
-
-        // NOTE: HackerRank public REST endpoint (unofficial internal endpoint)
         try {
           const hrRes = await fetch(
             `https://www.hackerrank.com/rest/hackers/${encodeURIComponent(username)}/badges`,
@@ -299,7 +258,7 @@ export async function POST(req: NextRequest) {
             success: true,
             stats: {
               username,
-              url: `https://www.hackerrank.com/profile/${username}`,
+              url: canonicalUrl,
               badges: models.length,
               stars: starsCount,
               last_updated: new Date().toISOString(),
@@ -314,23 +273,7 @@ export async function POST(req: NextRequest) {
       }
 
       case "credly": {
-        if (hostname !== "credly.com") {
-          return NextResponse.json(
-            { error: "This is not a valid Credly profile link." },
-            { status: 400 }
-          );
-        }
-        const parts = pathname.split("/").filter(Boolean);
-        // Matches https://www.credly.com/users/username/badges or /users/username
-        if (parts.length < 2 || parts[0] !== "users") {
-          return NextResponse.json(
-            { error: "This is not a valid Credly profile link. Expected https://www.credly.com/users/username" },
-            { status: 400 }
-          );
-        }
-        const username = parts[1];
-
-        // NOTE: Credly public badges JSON endpoint (unofficial public feed)
+        // NOTE: Unofficial public JSON endpoint for public Credly user badges
         try {
           const credRes = await fetch(
             `https://www.credly.com/users/${encodeURIComponent(username)}/badges.json`,
@@ -351,14 +294,30 @@ export async function POST(req: NextRequest) {
           }
 
           const credData = await credRes.json();
-          const badges = credData?.data || [];
+          const rawBadges = credData?.data || [];
+
+          // Map full badge objects for Phase 2 integration
+          const formattedBadges = rawBadges.map((b: any) => {
+            const template = b.badge_template || {};
+            const issuerEntity = template.issuer?.entities?.[0]?.entity?.name || b.issuer?.name || "Credly Partner";
+            return {
+              id: String(b.id || Math.random().toString(36).substring(2)),
+              title: template.name || b.name || "Verified Credential",
+              issuer: issuerEntity,
+              image_url: template.image_url || b.image_url || null,
+              issued_at: b.issued_at_date || b.issued_at || null,
+              expires_at: b.expires_at_date || b.expires_at || null,
+              badge_url: b.id ? `https://www.credly.com/badges/${b.id}/public_url` : canonicalUrl,
+            };
+          });
 
           return NextResponse.json({
             success: true,
             stats: {
               username,
-              url: `https://www.credly.com/users/${username}`,
-              badgeCount: badges.length,
+              url: canonicalUrl,
+              badgeCount: formattedBadges.length,
+              badges: formattedBadges,
               last_updated: new Date().toISOString(),
             },
           });
@@ -370,12 +329,107 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      case "googlescholar": {
+        try {
+          const res = await fetch(`https://scholar.google.com/citations?user=${encodeURIComponent(username)}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept-Language": "en-US,en;q=0.9",
+            },
+            next: { revalidate: 0 },
+          });
+
+          if (!res.ok) {
+            return NextResponse.json(
+              { error: "Couldn't fetch data from Google Scholar. Profile unavailable or ID not found." },
+              { status: 404 }
+            );
+          }
+
+          const html = await res.text();
+          const nameMatch = html.match(/<div id="gsc_prf_in">([^<]+)<\/div>/i);
+          const affMatch = html.match(/<div class="gsc_prf_il">([^<]+)<\/div>/i);
+          const citMatches = html.match(/<td class="gsc_rsb_std">(\d[\d,]*)<\/td>/g);
+
+          let citations = 0;
+          let hIndex = 0;
+          let i10Index = 0;
+
+          if (citMatches && citMatches.length >= 6) {
+            citations = parseInt(citMatches[0].replace(/<[^>]+>/g, "").replace(/,/g, ""), 10) || 0;
+            hIndex = parseInt(citMatches[2].replace(/<[^>]+>/g, "").replace(/,/g, ""), 10) || 0;
+            i10Index = parseInt(citMatches[4].replace(/<[^>]+>/g, "").replace(/,/g, ""), 10) || 0;
+          }
+
+          return NextResponse.json({
+            success: true,
+            stats: {
+              username,
+              url: canonicalUrl,
+              name: nameMatch ? nameMatch[1].trim() : username,
+              affiliation: affMatch ? affMatch[1].trim() : undefined,
+              citations,
+              hIndex,
+              i10Index,
+              last_updated: new Date().toISOString(),
+            },
+          });
+        } catch {
+          return NextResponse.json(
+            { error: "Couldn't fetch data from Google Scholar." },
+            { status: 502 }
+          );
+        }
+      }
+
+      case "orcid": {
+        try {
+          const res = await fetch(`https://pub.orcid.org/v3.0/${encodeURIComponent(username)}/record`, {
+            headers: {
+              Accept: "application/json",
+              "User-Agent": "Achievement-Hub-App",
+            },
+            next: { revalidate: 0 },
+          });
+
+          if (!res.ok) {
+            return NextResponse.json(
+              { error: "Couldn't fetch data from ORCID. 16-digit iD not found." },
+              { status: 404 }
+            );
+          }
+
+          const orcidData = await res.json();
+          const person = orcidData?.person;
+          const given = person?.name?.["given-names"]?.value || "";
+          const family = person?.name?.["family-name"]?.value || "";
+          const fullName = (given + " " + family).trim() || username;
+          const worksCount = orcidData?.["activities-summary"]?.works?.group?.length || 0;
+
+          return NextResponse.json({
+            success: true,
+            stats: {
+              username,
+              url: canonicalUrl,
+              name: fullName,
+              worksCount,
+              last_updated: new Date().toISOString(),
+            },
+          });
+        } catch {
+          return NextResponse.json(
+            { error: "Couldn't fetch data from ORCID record." },
+            { status: 502 }
+          );
+        }
+      }
+
       default:
         return NextResponse.json({ error: "Unsupported platform." }, { status: 400 });
     }
   } catch (err: any) {
     return NextResponse.json(
-      { error: "Server error syncing platform profile: " + err.message },
+      { error: "Server error syncing platform profile: " + (err.message || err) },
       { status: 500 }
     );
   }

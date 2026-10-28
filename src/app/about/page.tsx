@@ -10,7 +10,7 @@ export default function AboutPage() {
       {/* Header */}
       <div className="text-center space-y-3">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cream-100 border border-cream-border text-navy-800 text-xs font-semibold uppercase tracking-wider">
-          <span>Design Thinking Project &bull; [Group ID / Number]</span>
+          <span>Design Thinking Project &bull; CSBS &bull; JSPM's RSCOE</span>
         </div>
         <h1 className="font-serif text-3xl sm:text-4xl font-bold text-navy-900 tracking-tight">
           About Achievement Hub
@@ -65,7 +65,7 @@ export default function AboutPage() {
         </div>
       </div>
 
-      {/* Project Team Placeholders */}
+      {/* Project Team */}
       <div className="p-6 sm:p-8 bg-white rounded-xl border border-cream-border space-y-6">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-lg bg-cream-100 flex items-center justify-center text-navy-800">
@@ -73,43 +73,43 @@ export default function AboutPage() {
           </div>
           <div>
             <h2 className="font-serif text-xl font-bold text-navy-900">
-              Project Team &bull; [Group Number / Name]
+              Project Team
             </h2>
             <p className="text-xs text-gray-500">
-              [Department Name] &bull; [Institution / University Name]
+              Department of Computer Science and Business Systems &bull; JSPM's RSCOE
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
           <div className="p-4 bg-cream-50/70 border border-cream-border rounded-lg">
-            <p className="font-semibold text-navy-900 text-sm">[Team Member 1 Name]</p>
-            <p className="text-xs text-gray-500">[Student ID / Roll No]</p>
-            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">[Branch / Year]</p>
+            <p className="font-semibold text-navy-900 text-sm">Prathmesh Deshmukh</p>
+            <p className="text-xs text-gray-500">Roll No. RBT25CB044</p>
+            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">S.Y. CSBS</p>
           </div>
 
           <div className="p-4 bg-cream-50/70 border border-cream-border rounded-lg">
-            <p className="font-semibold text-navy-900 text-sm">[Team Member 2 Name]</p>
-            <p className="text-xs text-gray-500">[Student ID / Roll No]</p>
-            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">[Branch / Year]</p>
+            <p className="font-semibold text-navy-900 text-sm">Atharva Gogawale</p>
+            <p className="text-xs text-gray-500">Roll No. RBT25CB053</p>
+            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">S.Y. CSBS</p>
           </div>
 
           <div className="p-4 bg-cream-50/70 border border-cream-border rounded-lg">
-            <p className="font-semibold text-navy-900 text-sm">[Team Member 3 Name]</p>
-            <p className="text-xs text-gray-500">[Student ID / Roll No]</p>
-            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">[Branch / Year]</p>
+            <p className="font-semibold text-navy-900 text-sm">Aarya Nehete</p>
+            <p className="text-xs text-gray-500">Roll No. RBT25CB016</p>
+            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">S.Y. CSBS</p>
           </div>
 
           <div className="p-4 bg-cream-50/70 border border-cream-border rounded-lg">
-            <p className="font-semibold text-navy-900 text-sm">[Team Member 4 Name]</p>
-            <p className="text-xs text-gray-500">[Student ID / Roll No]</p>
-            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">[Branch / Year]</p>
+            <p className="font-semibold text-navy-900 text-sm">Poras Badwaik</p>
+            <p className="text-xs text-gray-500">Roll No. RBT25CB002</p>
+            <p className="text-[11px] text-navy-700/80 mt-1 font-medium">S.Y. CSBS</p>
           </div>
         </div>
 
         <div className="pt-2 border-t border-cream-border text-xs text-gray-600 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-          <span><strong>Faculty Guide:</strong> [Faculty Guide Name]</span>
-          <span><strong>Course:</strong> Design Thinking &bull; [Academic Year / Term]</span>
+          <span><strong>Faculty Guide:</strong> Prof. Suhasini Bhat</span>
+          <span><strong>Course:</strong> Design Thinking &bull; S.Y. (2025–26)</span>
         </div>
       </div>
     </div>
